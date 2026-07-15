@@ -1,0 +1,15 @@
+# macOS
+.DS_Store
+
+# Lightroom development symlinks
+*.lrdevplugin
+
+# Compiled Lua files
+*.luac
+
+# Logs
+*.log
+
+# IDE
+.vscode/
+.idea/

@@ -5,7 +5,7 @@
 - macOS
 - Lightroom Classic（已测试 14.5.2）
 - Adobe Photoshop（已测试 2025）
-- 滤镜插件（可选）：如 Imagenomic Portraiture、Camera Raw 等，需安装在 Photoshop 中
+- 滤镜插件：如 Imagenomic Portraiture，需安装在 Photoshop 中
 
 ## 安装
 
@@ -16,27 +16,19 @@ cp scripts/AutoPortraiture.sh ~/Library/Application\ Support/Adobe/Lightroom/Exp
 chmod +x ~/Library/Application\ Support/Adobe/Lightroom/Export\ Actions/AutoPortraiture.sh
 ```
 
-### 2. 配置滤镜标识符
+### 2. 在 Photoshop 中录制 Action
 
-脚本通过 `executeAction(stringIDToTypeID(FILTER_ID), ...)` 直接调用滤镜，不需要预录 Photoshop Action。只需在 CONFIG 区配置滤镜的标识符即可。JSX 内部会先尝试 stringID 调用，失败后自动回退到 charID（4 字符代码）调用，兼容只注册了 charID 的老滤镜。
+脚本通过 `app.doAction(actionName, actionSet)` 回放预录的 PS Action，需要先在 PS 中录制一个包含 Portraiture 步骤的 Action：
 
-已知的常用滤镜标识符：
+1. 打开 Photoshop，打开任意一张照片
+2. 窗口 → 动作（Window → Actions），调出动作面板
+3. 点击面板菜单 → 新建动作集（Action Set），命名为 `AutoPortraiture`
+4. 在该集下新建动作（Action），命名为 `Portraiture`，点击「开始记录」
+5. 滤镜 → Imagenomic → Portraiture 3/4
+6. 在 Portraiture 界面中调整参数，点击确定
+7. 回到动作面板，点击「停止录制」按钮
 
-| 滤镜 | FILTER_ID | 说明 |
-| --- | --- | --- |
-| Camera Raw Filter | `AdobeCameraRawFilter` | PS 内置 ✓ 已测试 |
-| Twirl (旋转扭曲) | `twirl` | PS 内置 ✓ 已测试 |
-| Gaussian Blur | `GaussianBlur` | PS 内置高斯模糊 |
-| Surface Blur | `surfaceBlur` | PS 内置表面模糊 |
-| Portraiture 3/4 | 需查询 | 安装后用 ScriptingListener 插件查询 |
-
-如果使用 Portraiture 或其他第三方滤镜，需要查询其 string ID：
-
-1. 安装 Adobe ScriptingListener 插件（PS 附带，位于 `Adobe Photoshop 2025/Plug-ins/Automate/` 目录下）
-2. 在 PS 中手动运行一次该滤镜
-3. 打开 `~/Desktop/ScriptingListenerJS.log`，找到对应的 `executeAction` 调用
-4. 复制其中的 `stringIDToTypeID("xxx")` 里的字符串
-5. 填入脚本的 `FILTER_ID` 配置项
+确保 Action 名称是 `Portraiture`，Action Set 名称是 `AutoPortraiture`，与脚本 CONFIG 中的配置一致。
 
 ### 3. 在 Lightroom 中配置导出
 
@@ -48,25 +40,16 @@ chmod +x ~/Library/Application\ Support/Adobe/Lightroom/Export\ Actions/AutoPort
 4. 选择 `AutoPortraiture.sh`
 5. 点击导出
 
-导出完成后，脚本自动运行：Photoshop 打开 JPEG → 调用滤镜 → 另存为 `<原文件名>_processed.jpg` → 删除原始 JPEG → 清理临时文件 → 弹出 macOS 通知。
+导出完成后，脚本自动运行：Photoshop 打开 JPEG → 回放 Action 调用 Portraiture → 另存为 `<原文件名>_processed.jpg` → 删除原始 JPEG → 清理临时文件 → 弹出 macOS 通知。
 
 ## 配置参数
 
 编辑 `scripts/AutoPortraiture.sh` 顶部 CONFIG 区域：
 
 ```bash
-# 滤镜标识符（Photoshop 内部 string ID）
-FILTER_ID="AdobeCameraRawFilter"
-
-# 滤镜调用时是否显示对话框
-# ALL = 显示滤镜界面（可手动调参）
-# NO  = 静默执行（用默认参数，不弹窗）
-FILTER_DIALOG_MODE="ALL"
-
-# 滤镜对话框弹出后自动点击 OK
-# yes = 自动点击（Twirl、Portraiture 等需确认的滤镜推荐开启）
-# no  = 等待手动点击
-AUTO_CLICK_OK="yes"
+# Action 名称和 Action Set 名称（需与 PS 中录制的一致）
+ACTION_NAME="Portraiture"
+ACTION_SET="AutoPortraiture"
 
 # 输出 JPEG 质量 (1-12, 12 = 最高)
 JPEG_QUALITY=12
@@ -78,20 +61,11 @@ JPEG_QUALITY=12
 cp scripts/AutoPortraiture.sh ~/Library/Application\ Support/Adobe/Lightroom/Export\ Actions/
 ```
 
-切换滤镜只需修改 `FILTER_ID` 一行。例如从 Camera Raw 切换到高斯模糊：
-
-```bash
-FILTER_ID="GaussianBlur"
-FILTER_DIALOG_MODE="NO"   # 高斯模糊不需要交互界面，设为 NO 静默执行
-```
+如果使用了不同的 Action 名称或 Set 名称，修改 `ACTION_NAME` 和 `ACTION_SET` 即可。
 
 ## 批量处理
 
-在 Lightroom 中选中多张照片后导出，LR 会逐张导出 JPEG 并为每张调用一次脚本。Photoshop 依次处理每张照片，全程无需手动干预（当 `FILTER_DIALOG_MODE="NO"` 时）。处理完成后每张照片都会收到 macOS 通知。
-
-如果 `FILTER_DIALOG_MODE="ALL"` 且 `AUTO_CLICK_OK="yes"`，每张照片处理时弹出滤镜界面后会自动点击 OK，全程无需手动干预。适合 Twirl、Portraiture 等需要点击确认才能载入效果的滤镜。
-
-如果 `AUTO_CLICK_OK="no"`，则滤镜界面弹出后等待手动点击确定，适合需要逐张调参的场景。
+在 Lightroom 中选中多张照片后导出，LR 会逐张导出 JPEG 并为每张调用一次脚本。Photoshop 依次处理每张照片，全程无需手动干预。处理完成后每张照片都会收到 macOS 通知。
 
 ## 输出说明
 
@@ -109,36 +83,30 @@ FILTER_DIALOG_MODE="NO"   # 高斯模糊不需要交互界面，设为 NO 静默
 每条记录包含时间戳和操作状态，可用于排错。示例：
 
 ```
-2026-07-14 02:12:25 | === Export Action called ===
-2026-07-14 02:12:25 | Input: /tmp/ap_autoclick_test.jpg
-2026-07-14 02:12:25 | Output: /tmp/ap_autoclick_test_processed.jpg
-2026-07-14 02:12:25 | JSX script created (filter=twirl)
-2026-07-14 02:12:25 | Auto-clicker started (PID=60751)
-2026-07-14 02:12:25 | Launching Photoshop...
-2026-07-14 02:12:30 | Photoshop exit code: 0
-2026-07-14 02:12:30 | Auto-clicker stopped
-2026-07-14 02:12:30 | SUCCESS: 15MB: /tmp/ap_autoclick_test_processed.jpg
-2026-07-14 02:12:30 | Deleted original: /tmp/ap_autoclick_test.jpg
-2026-07-14 02:12:30 | === Done ===
+2026-07-14 02:20:00 | === Export Action called ===
+2026-07-14 02:20:00 | Input: /path/to/photo.jpg
+2026-07-14 02:20:00 | Output: /path/to/photo_processed.jpg
+2026-07-14 02:20:00 | JSX script created (action=AutoPortraiture/Portraiture)
+2026-07-14 02:20:00 | Launching Photoshop...
+2026-07-14 02:20:10 | Photoshop exit code: 0
+2026-07-14 02:20:10 | SUCCESS: 15MB: /path/to/photo_processed.jpg
+2026-07-14 02:20:10 | Deleted original: /path/to/photo.jpg
+2026-07-14 02:20:10 | === Done ===
 ```
 
 ## 常见问题
 
 **导出后没有生成 _processed.jpg**
 
-检查日志文件。确认 `FILTER_ID` 配置的滤镜标识符正确。如果标识符错误，JSX 中的 `executeAction` 会静默失败（被 try-catch 捕获），照片仍会被保存但未经滤镜处理。
+检查日志文件。确认 PS 中已录制 Action，且 Action 名称和 Set 名称与脚本 CONFIG 中的 `ACTION_NAME` 和 `ACTION_SET` 一致。如果 Action 不存在，JSX 中的 `app.doAction()` 会静默失败（被 try-catch 捕获），照片仍会被保存但未经滤镜处理。
 
-**滤镜标识符怎么查**
+**Portraiture 效果没生效**
 
-安装 ScriptingListener 插件后，在 PS 中手动运行一次目标滤镜，然后查看 `~/Desktop/ScriptingListenerJS.log` 文件，其中会记录对应的 `executeAction` 调用及 `stringIDToTypeID` 参数。
+确认 Portraiture 插件已正确安装在 Photoshop 中，且录制 Action 时确实执行了 Portraiture 滤镜步骤（不只是打开又关闭了滤镜窗口）。可以在 PS 中手动回放该 Action 验证效果是否生效。
 
 **Photoshop 没有弹到前台**
 
-脚本禁用了 PS 对话框，Photoshop 在后台静默处理（当 `FILTER_DIALOG_MODE="NO"` 时）。处理完成后会收到 macOS 通知。如果需要 PS 可见，AppleScript 中的 `activate` 行会尝试将 PS 带到前台。
-
-**自动点击 OK 不生效**
-
-自动点击功能依赖 macOS 的辅助功能（Accessibility）权限。首次运行时系统可能弹出授权提示，需要在「系统设置 → 隐私与安全 → 辅助功能」中为运行脚本的终端应用（如 Terminal、iTerm 或 Lightroom）授权。授权后重新运行即可。
+脚本禁用了 PS 对话框（`app.displayDialogs = DialogModes.NO`），Photoshop 在后台静默处理。处理完成后会收到 macOS 通知。AppleScript 中的 `activate` 行会尝试将 PS 带到前台。
 
 **使用的是其他版本的 Photoshop**
 

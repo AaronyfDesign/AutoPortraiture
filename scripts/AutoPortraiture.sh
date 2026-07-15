@@ -5,35 +5,26 @@
 # 工作流程：
 #   1. LR 导出 JPEG 后，将文件路径作为 $1 传给本脚本
 #   2. 脚本通过 AppleScript 调 Photoshop 执行 JSX
-#   3. JSX 在 PS 中：打开 JPEG → 调用滤镜 → 另存为 JPEG
+#   3. JSX 在 PS 中：打开 JPEG → 回放 Action → 另存为 JPEG
 #   4. 脚本删除原始 JPEG 和临时 PSD（如有）
 #
 # 滤镜调用方式：
-#   通过 executeAction(stringIDToTypeID(FILTER_ID), ...) 直接调用
-#   不依赖预录 Action，更换滤镜只需改 FILTER_ID 配置项
+#   通过 app.doAction(actionName, actionSet) 回放预录的 PS Action
+#   需要先在 PS 中录制一个包含 Portraiture 步骤的 Action
 #
-# 已知滤镜标识符：
-#   Camera Raw Filter  → "AdobeCameraRawFilter"
-#   Twirl (旋转扭曲)    → "twirl"
-#   Gaussian Blur      → "GaussianBlur"
-#   Surface Blur       → "surfaceBlur"
-#   Portraiture 3/4    → 需安装后用 ScriptingListener 插件查询
+# 录制 Action 步骤：
+#   1. PS 中打开任意照片
+#   2. 窗口 → 动作，新建 Action（命名如 "Portraiture"），放入 Action Set（如 "AutoPortraiture"）
+#   3. 开始录制
+#   4. 滤镜 → Imagenomic → Portraiture 3/4
+#   5. 调整参数，点确定
+#   6. 停止录制
 # ============================================================
 
 # ==================== CONFIG ====================
-# 滤镜标识符（Photoshop 内部 string ID）
-# 更换滤镜只需修改这一行
-FILTER_ID="Portraiture 4"
-
-# 滤镜调用时是否显示对话框
-# ALL = 显示滤镜界面（可手动调参）
-# NO  = 静默执行（用默认参数，不弹窗）
-FILTER_DIALOG_MODE="ALL"
-
-# 滤镜对话框弹出后自动点击 OK（适用于 Twirl、Portraiture 等需确认的滤镜）
-# yes = 自动点击 OK，批量处理无需手动操作
-# no  = 等待手动点击 OK
-AUTO_CLICK_OK="yes"
+# Action 名称和 Action Set 名称（需与 PS 中录制的一致）
+ACTION_NAME="Portraiture"
+ACTION_SET="AutoPortraiture"
 
 # 输出 JPEG 质量 (1-12, 12 = 最高)
 JPEG_QUALITY=12
@@ -79,10 +70,10 @@ cat > "$JSX_FILE" << JSXEND
     var inputFile = "$INPUT_FILE";
     var outputFile = "$OUTPUT_FILE";
     var jpegQuality = $JPEG_QUALITY;
-    var filterId = "$FILTER_ID";
-    var dialogMode = "$FILTER_DIALOG_MODE";
+    var actionName = "$ACTION_NAME";
+    var actionSet = "$ACTION_SET";
 
-    // 禁用 PS 对话框（我们自己控制滤镜对话框）
+    // 禁用所有 PS 对话框
     app.displayDialogs = DialogModes.NO;
 
     // --- Step 1: 打开文件 ---
@@ -104,20 +95,12 @@ cat > "$JSX_FILE" << JSXEND
         if (bgLayer) bgLayer.duplicate();
     } catch (e) {}
 
-    // --- Step 3: 调用滤镜 ---
-    var mode = (dialogMode === "ALL") ? DialogModes.ALL : DialogModes.NO;
+    // --- Step 3: 回放 Action（调用 Portraiture） ---
     try {
-        var filterDesc = new ActionDescriptor();
-        try {
-            executeAction(stringIDToTypeID(filterId), filterDesc, mode);
-            $.writeln("Filter applied (stringID): " + filterId);
-        } catch (e1) {
-            // 回退：尝试 4 字符 charID
-            executeAction(charIDToTypeID(filterId), filterDesc, mode);
-            $.writeln("Filter applied (charID): " + filterId);
-        }
+        app.doAction(actionName, actionSet);
+        $.writeln("Action applied: " + actionSet + "/" + actionName);
     } catch (e) {
-        $.writeln("Filter failed: " + e.toString());
+        $.writeln("Action failed: " + e.toString());
     }
 
     // --- Step 4: 合并图层 ---
@@ -139,12 +122,12 @@ cat > "$JSX_FILE" << JSXEND
 })();
 JSXEND
 
-log "JSX script created (filter=$FILTER_ID)"
+log "JSX script created (action=$ACTION_SET/$ACTION_NAME)"
 
 # 创建 AppleScript 启动文件
 ASCPT_FILE="/tmp/ap_launch_$$.scpt"
 python3 -c "
-scpt = 'tell application \"Adobe Photoshop 2026\"\n'
+scpt = 'tell application \"Adobe Photoshop 2025\"\n'
 scpt += '  activate\n'
 scpt += '  set jsCode to (read POSIX file \"$JSX_FILE\" as \u00abclass utf8\u00bb)\n'
 scpt += '  do javascript jsCode\n'
@@ -153,50 +136,10 @@ with open('$ASCPT_FILE', 'w') as f:
     f.write(scpt)
 "
 
-# --- 自动点击滤镜对话框 OK 按钮 ---
-# 当 FILTER_DIALOG_MODE=ALL 且 AUTO_CLICK_OK=yes 时
-# 滤镜对话框弹出会阻塞 JSX 执行，此后台进程用 System Events
-# 轮询检测对话框并自动点击 OK，使流程继续
-AUTO_CLICK_PID=""
-if [ "$FILTER_DIALOG_MODE" = "ALL" ] && [ "$AUTO_CLICK_OK" = "yes" ]; then
-    (
-        for i in $(seq 1 60); do
-            sleep 0.5
-            RESULT=$(osascript -e '
-            tell application "System Events"
-                tell process "Adobe Photoshop 2025"
-                    repeat with w in (every window)
-                        try
-                            click button "OK" of w
-                            return "clicked"
-                        end try
-                        try
-                            click button "确定" of w
-                            return "clicked"
-                        end try
-                    end repeat
-                end tell
-            end tell
-            return "no_dialog"' 2>/dev/null)
-            if [ "$RESULT" = "clicked" ]; then
-                break
-            fi
-        done
-    ) &
-    AUTO_CLICK_PID=$!
-    log "Auto-clicker started (PID=$AUTO_CLICK_PID)"
-fi
-
 log "Launching Photoshop..."
 osascript "$ASCPT_FILE" 2>> "$LOGFILE"
 PS_RESULT=$?
 log "Photoshop exit code: $PS_RESULT"
-
-# 清理后台自动点击进程
-if [ -n "$AUTO_CLICK_PID" ]; then
-    kill $AUTO_CLICK_PID 2>/dev/null
-    log "Auto-clicker stopped"
-fi
 
 if [ -f "$OUTPUT_FILE" ]; then
     OUT_SIZE=$(stat -f%z "$OUTPUT_FILE" 2>/dev/null || echo "unknown")
