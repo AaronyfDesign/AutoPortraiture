@@ -2,10 +2,10 @@
 
 ## 环境要求
 
-- macOS
-- Lightroom Classic（已测试 14.5.2）
-- Adobe Photoshop（已测试 2025）
-- 滤镜插件：如 Imagenomic Portraiture，需安装在 Photoshop 中
+- macOS（已测试 15.x Apple Silicon）
+- Lightroom Classic（已测试 14.x）
+- Adobe Photoshop（已测试 2024、2025、2026，其余版本未测试）
+- 滤镜插件：如 Imagenomic Portraiture 3/4，需安装在 Photoshop 中
 
 ## 安装
 
@@ -40,7 +40,7 @@ chmod +x ~/Library/Application\ Support/Adobe/Lightroom/Export\ Actions/AutoPort
 4. 选择 `AutoPortraiture.sh`
 5. 点击导出
 
-导出完成后，脚本自动运行：Photoshop 打开 JPEG → 回放 Action 调用 Portraiture → 另存为 `<原文件名>_processed.jpg` → 删除原始 JPEG → 清理临时文件 → 弹出 macOS 通知。
+导出完成后，脚本自动运行：Photoshop 打开 JPEG → 回放 Action 调用 Portraiture → 另存为 `<原文件名>_<ACTION_NAME>.jpg` → 删除原始 JPEG → 清理临时文件 → 弹出 macOS 通知。
 
 ## 配置参数
 
@@ -51,9 +51,14 @@ chmod +x ~/Library/Application\ Support/Adobe/Lightroom/Export\ Actions/AutoPort
 ACTION_NAME="Portraiture"
 ACTION_SET="AutoPortraiture"
 
+# Photoshop 版本（已测试：2024、2025、2026，其余版本未测试）
+PS_VERSION="2025"
+
 # 输出 JPEG 质量 (1-12, 12 = 最高)
 JPEG_QUALITY=12
 ```
+
+输出文件名为 `<原文件名>_<ACTION_NAME>.jpg`。例如 `ACTION_NAME="Portraiture"` 时，`AYF_5412.jpg` 的输出为 `AYF_5412_Portraiture.jpg`。
 
 修改后同步到 Export Actions 目录：
 
@@ -61,7 +66,7 @@ JPEG_QUALITY=12
 cp scripts/AutoPortraiture.sh ~/Library/Application\ Support/Adobe/Lightroom/Export\ Actions/
 ```
 
-如果使用了不同的 Action 名称或 Set 名称，修改 `ACTION_NAME` 和 `ACTION_SET` 即可。
+如果使用了不同的 Action 名称或 Set 名称，修改 `ACTION_NAME` 和 `ACTION_SET` 即可。更换 PS 版本时修改 `PS_VERSION`。
 
 ## 批量处理
 
@@ -71,10 +76,10 @@ cp scripts/AutoPortraiture.sh ~/Library/Application\ Support/Adobe/Lightroom/Exp
 
 每张照片处理完成后：
 
-- 生成 `<原文件名>_processed.jpg`（与导出目录相同位置）
+- 生成 `<原文件名>_<ACTION_NAME>.jpg`（与导出目录相同位置）
 - 原始 JPEG（LR 导出的）被删除
 - 临时 PSD 文件（如有）被删除
-- 最终只保留 `_processed.jpg` 一个文件
+- 最终只保留 `<原文件名>_<ACTION_NAME>.jpg` 一个文件
 
 ## 日志
 
@@ -85,18 +90,18 @@ cp scripts/AutoPortraiture.sh ~/Library/Application\ Support/Adobe/Lightroom/Exp
 ```
 2026-07-14 02:20:00 | === Export Action called ===
 2026-07-14 02:20:00 | Input: /path/to/photo.jpg
-2026-07-14 02:20:00 | Output: /path/to/photo_processed.jpg
+2026-07-14 02:20:00 | Output: /path/to/photo_Portraiture.jpg
 2026-07-14 02:20:00 | JSX script created (action=AutoPortraiture/Portraiture)
-2026-07-14 02:20:00 | Launching Photoshop...
+2026-07-14 02:20:00 | Launching Photoshop (PS 2025)...
 2026-07-14 02:20:10 | Photoshop exit code: 0
-2026-07-14 02:20:10 | SUCCESS: 15MB: /path/to/photo_processed.jpg
+2026-07-14 02:20:10 | SUCCESS: 15MB: /path/to/photo_Portraiture.jpg
 2026-07-14 02:20:10 | Deleted original: /path/to/photo.jpg
 2026-07-14 02:20:10 | === Done ===
 ```
 
 ## 常见问题
 
-**导出后没有生成 _processed.jpg**
+**导出后没有生成输出文件**
 
 检查日志文件。确认 PS 中已录制 Action，且 Action 名称和 Set 名称与脚本 CONFIG 中的 `ACTION_NAME` 和 `ACTION_SET` 一致。如果 Action 不存在，JSX 中的 `app.doAction()` 会静默失败（被 try-catch 捕获），照片仍会被保存但未经滤镜处理。
 
@@ -110,7 +115,7 @@ cp scripts/AutoPortraiture.sh ~/Library/Application\ Support/Adobe/Lightroom/Exp
 
 **使用的是其他版本的 Photoshop**
 
-修改脚本中 AppleScript 的 `tell application "Adobe Photoshop 2025"` 为你的实际版本名。
+修改脚本 CONFIG 中的 `PS_VERSION` 为你的版本号（如 `"2024"`、`"2026"`）。已测试版本：2024、2025、2026，其余版本未测试。
 
 **文件名包含中文**
 

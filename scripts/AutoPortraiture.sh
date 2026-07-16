@@ -26,6 +26,9 @@
 ACTION_NAME="Portraiture"
 ACTION_SET="AutoPortraiture"
 
+# Photoshop 版本（已测试：2024、2025、2026，其余版本未测试）
+PS_VERSION="2025"
+
 # 输出 JPEG 质量 (1-12, 12 = 最高)
 JPEG_QUALITY=12
 # ================================================
@@ -59,7 +62,7 @@ fi
 BASENAME=$(basename "$INPUT_FILE")
 FILENAME="${BASENAME%.*}"
 DIRNAME=$(dirname "$INPUT_FILE")
-OUTPUT_FILE="$DIRNAME/${FILENAME}_processed.jpg"
+OUTPUT_FILE="$DIRNAME/${FILENAME}_${ACTION_NAME}.jpg"
 
 log "Output: $OUTPUT_FILE"
 notify "Processing: $BASENAME..."
@@ -127,7 +130,7 @@ log "JSX script created (action=$ACTION_SET/$ACTION_NAME)"
 # 创建 AppleScript 启动文件
 ASCPT_FILE="/tmp/ap_launch_$$.scpt"
 python3 -c "
-scpt = 'tell application \"Adobe Photoshop 2025\"\n'
+scpt = 'tell application \"Adobe Photoshop $PS_VERSION\"\n'
 scpt += '  activate\n'
 scpt += '  set jsCode to (read POSIX file \"$JSX_FILE\" as \u00abclass utf8\u00bb)\n'
 scpt += '  do javascript jsCode\n'
@@ -136,7 +139,7 @@ with open('$ASCPT_FILE', 'w') as f:
     f.write(scpt)
 "
 
-log "Launching Photoshop..."
+log "Launching Photoshop (PS $PS_VERSION)..."
 osascript "$ASCPT_FILE" 2>> "$LOGFILE"
 PS_RESULT=$?
 log "Photoshop exit code: $PS_RESULT"
@@ -145,7 +148,7 @@ if [ -f "$OUTPUT_FILE" ]; then
     OUT_SIZE=$(stat -f%z "$OUTPUT_FILE" 2>/dev/null || echo "unknown")
     SIZE_MB=$((OUT_SIZE / 1048576))
     log "SUCCESS: ${SIZE_MB}MB: $OUTPUT_FILE"
-    notify "Done! ${SIZE_MB}MB: ${FILENAME}_processed.jpg"
+    notify "Done! ${SIZE_MB}MB: ${FILENAME}_${ACTION_NAME}.jpg"
 else
     log "ERROR: Output not found"
     notify "Error: Output file not created"

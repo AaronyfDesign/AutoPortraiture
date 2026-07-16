@@ -1,7 +1,18 @@
 # AutoPortraiture — Lightroom 导出后自动磨皮
 
-> LR 导出 JPEG → Photoshop 回放 Action 调用 Portraiture → 另存为 `_processed.jpg` → 清理原文件。  
-> 全程自动，通过预录 PS Action 调用滤镜，Action 名称可配置。
+> LR 导出 JPEG → Photoshop 回放 Action 调用 Portraiture → 另存为 `<原文件名>_<ACTION_NAME>.jpg` → 清理原文件。  
+> 全程自动，通过预录 PS Action 调用滤镜，Action 名称与 PS 版本均可配置。
+
+## 适配环境
+
+| 组件 | 已测试版本 | 未测试版本 |
+| --- | --- | --- |
+| Adobe Photoshop | 2024、2025、2026 | 其余版本 |
+| Lightroom Classic | 14.x | — |
+| macOS | 15.x (Apple Silicon) | Intel / 其他 |
+| 滤镜插件 | Imagenomic Portraiture 3/4 | — |
+
+> **注意**：`AutoPortraiture.lrplugin/` 目录为已弃用（deprecated）的 Lightroom SDK Lua 插件，不再维护。当前方案使用 `scripts/AutoPortraiture.sh` 导出操作脚本，与该插件无关。
 
 ## 工作原理
 
@@ -9,7 +20,7 @@
 2. LR 将导出的 JPEG 路径传给脚本
 3. 脚本通过 AppleScript 调起 Photoshop，执行 JSX 脚本
 4. JSX 脚本用 `app.doAction(actionName, actionSet)` 回放预录的 Action
-5. 另存为 `<原文件名>_processed.jpg`，删除原始 JPEG 和临时 PSD
+5. 另存为 `<原文件名>_<ACTION_NAME>.jpg`，删除原始 JPEG 和临时 PSD
 6. macOS 通知提示完成
 
 ## 目录结构
@@ -20,10 +31,11 @@ AutoPortraiture/
 │   └── AutoPortraiture.sh          # 主脚本（Shell → AppleScript → JSX）
 ├── docs/
 │   ├── usage.md                    # 详细使用指南
-│   ├── design.md                   # 设计文档
-│   └── troubleshooting.md          # 排错记录（LR SDK 阶段，历史参考）
-├── AutoPortraiture.lrplugin/        # 已弃用：LR SDK Lua 插件
-└── README.md
+│   └── troubleshooting.md          # 排错记录（deprecated，历史参考）
+├── AutoPortraiture.lrplugin/        # deprecated：LR SDK Lua 插件，不再维护
+├── LICENSE
+├── README.md
+└── .gitignore
 ```
 
 ## 安装
@@ -50,9 +62,14 @@ chmod +x ~/Library/Application\ Support/Adobe/Lightroom/Export\ Actions/AutoPort
 ACTION_NAME="Portraiture"
 ACTION_SET="AutoPortraiture"
 
+# Photoshop 版本（已测试：2024、2025、2026，其余版本未测试）
+PS_VERSION="2025"
+
 # 输出 JPEG 质量 (1-12, 12 = 最高)
 JPEG_QUALITY=12
 ```
+
+输出文件名为 `<原文件名>_<ACTION_NAME>.jpg`，例如 `ACTION_NAME="Portraiture"` 时输出 `photo_Portraiture.jpg`。
 
 修改配置后重新同步到 Export Actions 目录即可生效。
 
@@ -66,5 +83,6 @@ JPEG_QUALITY=12
 | 参数 | 录制时锁定（如需调参需重新录制） |
 | 切换滤镜 | 需重新录制 Action |
 | 对话框 | `app.displayDialogs = DialogModes.NO` 抑制 PS 自身对话框，Action 内的滤镜步骤按录制时的设置执行 |
+| PS 版本 | 通过 `PS_VERSION` 配置，已测试 2024/2025/2026 |
 
 详细使用说明见 [docs/usage.md](docs/usage.md)。

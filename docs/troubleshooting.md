@@ -1,5 +1,7 @@
 # AutoPortraiture — Lightroom SDK 插件问题排查记录
 
+> **⚠️ DEPRECATED**：本文档记录的是已弃用的 LR SDK Lua 插件方案的排错过程，当前方案（导出操作 Shell 脚本）与这些内容无关，仅供历史参考。
+
 本文档记录了 AutoPortraiture 插件在 Lightroom Classic 14.5.2 (macOS) 上从初始加载到菜单项正常注册过程中遇到的所有问题、排查思路和最终解决方案。
 
 ---
