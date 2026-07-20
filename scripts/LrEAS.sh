@@ -35,10 +35,14 @@ PS_VERSION="2025"
 
 # 输出 JPEG 质量 (1-12, 12 = 最高)
 JPEG_QUALITY=12
+
+# 文件锁超时（秒）：批量导出时多张照片排队等待的最长时间
+LOCK_TIMEOUT=300
 # ================================================
 
 INPUT_FILE="$1"
 LOGFILE="$HOME/Desktop/lreas.log"
+LOCK_DIR="/tmp/lreas.lock"
 
 log() {
     echo "$(date '+%Y-%m-%d %H:%M:%S') | $1" >> "$LOGFILE"
@@ -62,6 +66,33 @@ if [ ! -f "$INPUT_FILE" ]; then
     notify "Error: File not found"
     exit 1
 fi
+
+# --- 文件锁：确保批量导出时串行操作 Photoshop ---
+# 用 mkdir 的原子性实现排他锁
+# trap 确保脚本以任何方式退出时都释放锁
+trap 'rmdir "$LOCK_DIR" 2>/dev/null' EXIT
+
+WAITED=0
+while ! mkdir "$LOCK_DIR" 2>/dev/null; do
+    sleep 1
+    WAITED=$((WAITED + 1))
+    if [ $WAITED -ge $LOCK_TIMEOUT ]; then
+        # 超时自动清理：前一个进程可能异常崩溃未释放锁
+        LOCK_AGE=$(stat -f%m "$LOCK_DIR" 2>/dev/null || echo 0)
+        NOW=$(date +%s)
+        AGE=$((NOW - LOCK_AGE))
+        if [ $AGE -ge $LOCK_TIMEOUT ]; then
+            log "WARNING: Lock stale (${AGE}s old), force removing"
+            rmdir "$LOCK_DIR" 2>/dev/null
+            WAITED=0
+            continue
+        fi
+        log "ERROR: Lock timeout after ${LOCK_TIMEOUT}s"
+        notify "Error: Batch queue timeout"
+        exit 1
+    fi
+done
+log "Lock acquired (waited ${WAITED}s)"
 
 BASENAME=$(basename "$INPUT_FILE")
 FILENAME="${BASENAME%.*}"
